@@ -2,81 +2,94 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
-import { Moon, Search, Play, Heart, MoreHorizontal, Clock, User } from "lucide-react"
+import { Moon, Search, Play, Heart, MoreHorizontal, Clock, User, LogOut } from "lucide-react"
+import { useAuth } from "@/contexts/auth-context"
+import { apiClient, Song } from "@/lib/api"
+import { useToast } from "@/hooks/use-toast"
 
-// Mock data for demonstration
-const mockResults = [
-  {
-    id: 1,
-    title: "Blinding Lights",
-    artist: "The Weeknd",
-    album: "After Hours",
-    duration: "3:20",
-    image: "/placeholder.svg?height=60&width=60",
-  },
-  {
-    id: 2,
-    title: "Watermelon Sugar",
-    artist: "Harry Styles",
-    album: "Fine Line",
-    duration: "2:54",
-    image: "/placeholder.svg?height=60&width=60",
-  },
-  {
-    id: 3,
-    title: "Levitating",
-    artist: "Dua Lipa",
-    album: "Future Nostalgia",
-    duration: "3:23",
-    image: "/placeholder.svg?height=60&width=60",
-  },
-  {
-    id: 4,
-    title: "Good 4 U",
-    artist: "Olivia Rodrigo",
-    album: "SOUR",
-    duration: "2:58",
-    image: "/placeholder.svg?height=60&width=60",
-  },
-  {
-    id: 5,
-    title: "Stay",
-    artist: "The Kid LAROI & Justin Bieber",
-    album: "F*CK LOVE 3: OVER YOU",
-    duration: "2:21",
-    image: "/placeholder.svg?height=60&width=60",
-  },
-]
 
 export default function SearchPage() {
   const [searchQuery, setSearchQuery] = useState("")
-  const [results, setResults] = useState(mockResults)
+  const [results, setResults] = useState<Song[]>([])
   const [isSearching, setIsSearching] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const { user, logout, isAuthenticated } = useAuth()
+  const { toast } = useToast()
 
-  const handleSearch = (e: React.FormEvent) => {
+  // Load initial songs on mount
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadInitialSongs()
+    }
+  }, [isAuthenticated])
+
+  const loadInitialSongs = async () => {
+    try {
+      const songs = await apiClient.getAllSongs()
+      setResults(songs)
+    } catch (error) {
+      toast({
+        title: "Error loading songs",
+        description: "Failed to load songs. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSearching(true)
-    // Simulate search delay
-    setTimeout(() => {
-      setIsSearching(false)
-      // Filter results based on search query
+    
+    try {
       if (searchQuery.trim()) {
-        const filtered = mockResults.filter(
-          (item) =>
-            item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.artist.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.album.toLowerCase().includes(searchQuery.toLowerCase()),
-        )
-        setResults(filtered)
+        const searchResults = await apiClient.searchSongs(searchQuery)
+        setResults(searchResults)
       } else {
-        setResults(mockResults)
+        const allSongs = await apiClient.getAllSongs()
+        setResults(allSongs)
       }
-    }, 500)
+    } catch (error) {
+      toast({
+        title: "Search failed",
+        description: "Failed to search songs. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
+  // Redirect to login if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="bg-gray-900/50 border-emerald-900/30">
+          <CardContent className="p-12 text-center">
+            <h2 className="text-2xl font-semibold text-emerald-400 mb-4">Authentication Required</h2>
+            <p className="text-gray-400 mb-6">Please log in to access the music search.</p>
+            <div className="space-x-4">
+              <Link href="/login">
+                <Button className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700">
+                  Login
+                </Button>
+              </Link>
+              <Link href="/register">
+                <Button variant="outline" className="border-emerald-600 text-emerald-400 hover:bg-emerald-900/20">
+                  Sign Up
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -93,16 +106,19 @@ export default function SearchPage() {
             </span>
           </Link>
           <div className="flex items-center space-x-4">
-            <Link href="/login">
-              <Button variant="ghost" className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/20">
-                Login
-              </Button>
-            </Link>
-            <Link href="/register">
-              <Button className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700">
-                Sign Up
-              </Button>
-            </Link>
+            {user && (
+              <Link href="/profile" className="text-emerald-400 hover:text-emerald-300 transition-colors">
+                Welcome, {user.name || user.email}
+              </Link>
+            )}
+            <Button 
+              variant="ghost" 
+              className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/20"
+              onClick={logout}
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
           </div>
         </div>
       </nav>
@@ -165,18 +181,21 @@ export default function SearchPage() {
                         >
                           <Play className="w-4 h-4" />
                         </Button>
-                        <img
-                          src={track.image || "/placeholder.svg"}
-                          alt={track.title}
-                          className="w-12 h-12 rounded-md object-cover"
-                        />
+                        <div className="w-12 h-12 rounded-md bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center">
+                          <Moon className="w-6 h-6 text-black" />
+                        </div>
                         <div className="flex-1 min-w-0">
                           <h3 className="font-medium text-white truncate">{track.title}</h3>
-                          <p className="text-gray-400 text-sm truncate">{track.artist}</p>
+                          <p className="text-gray-400 text-sm truncate">{Array.isArray(track.artist) ? track.artist.join(", ") : track.artist}</p>
                         </div>
                         <div className="hidden md:block text-gray-400 text-sm min-w-0 flex-1">
                           <p className="truncate">{track.album}</p>
                         </div>
+                        {track.genre && (
+                          <div className="hidden lg:block text-gray-400 text-sm">
+                            <span className="bg-emerald-900/30 px-2 py-1 rounded text-xs">{track.genre}</span>
+                          </div>
+                        )}
                         <div className="flex items-center space-x-2">
                           <Button
                             size="sm"
@@ -198,6 +217,13 @@ export default function SearchPage() {
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+          ) : isLoading ? (
+            <Card className="bg-gray-900/50 border-emerald-900/30">
+              <CardContent className="p-12 text-center">
+                <div className="animate-spin w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                <p className="text-gray-400">Loading songs...</p>
               </CardContent>
             </Card>
           ) : (
