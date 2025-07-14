@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 // Types
 export interface User {
@@ -114,6 +114,53 @@ class ApiClient {
       body: JSON.stringify({ email, password }),
     }, false)
     
+    this.setToken(response.access_token)
+    return response
+  }
+
+// Neon Auth
+// 1. Send the Neon access token, project ID, and server key to your backend
+// 2. Your backend will validate these credentials
+// 3. Upon successful validation, it will return a JWT token
+// 4. The API client will automatically store this JWT token for future authenticated requests
+  async neonAuth(accessToken: string): Promise<AuthResponse> {
+    const projectId = process.env.NEXT_PUBLIC_NEON_PROJECT_ID
+    const serverKey = process.env.NEXT_PUBLIC_NEON_SERVER_KEY
+    
+    if (!projectId || !serverKey) {
+      throw new Error('Neon Auth configuration is missing')
+    }
+
+    const response = await this.request<AuthResponse>('/auth/neon', {
+      method: 'POST',
+      headers: {
+        'x-stack-access-type': 'server',
+        'x-stack-project-id': projectId,
+        'x-stack-secret-server-key': serverKey,
+        'x-stack-access-token': accessToken
+      }
+    }, false)
+    
+    this.setToken(response.access_token)
+    return response
+  }
+
+  async googleAuth(token: string): Promise<AuthResponse> {
+    const response = await this.request<AuthResponse>('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ token })
+    }, false)
+
+    this.setToken(response.access_token)
+    return response
+  }
+
+  async githubAuth(code: string): Promise<AuthResponse> {
+    const response = await this.request<AuthResponse>('/auth/github', {
+      method: 'POST',
+      body: JSON.stringify({ code })
+    }, false)
+
     this.setToken(response.access_token)
     return response
   }

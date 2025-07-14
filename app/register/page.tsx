@@ -1,15 +1,21 @@
 "use client"
 
 import type React from "react"
-
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Moon, Eye, EyeOff, User, Mail, Lock } from "lucide-react"
+import { Moon, Eye, EyeOff, User, Mail, Lock, Check, X } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/hooks/use-toast"
+
+const Requirement = ({ label, met }) => (
+  <div className={`flex items-center transition-all duration-300 ${met ? "text-emerald-400" : "text-gray-500"}`}>
+    {met ? <Check className="w-4 h-4 mr-2" /> : <X className="w-4 h-4 mr-2" />}
+    {label}
+  </div>
+)
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
@@ -21,14 +27,52 @@ export default function RegisterPage() {
     password: "",
     confirmPassword: "",
   })
+  const [isTyping, setIsTyping] = useState(false)
+  const [nameValidation, setNameValidation] = useState("")
+  const [emailValidation, setEmailValidation] = useState("")
+  const [passwordRequirements, setPasswordRequirements] = useState({
+    minLength: false,
+    uppercase: false,
+    lowercase: false,
+    number: false,
+    specialChar: false,
+  })
+  const [passwordsMatch, setPasswordsMatch] = useState(false)
   const { register } = useAuth()
   const { toast } = useToast()
 
+  useEffect(() => {
+    setPasswordRequirements({
+      minLength: formData.password.length >= 8,
+      uppercase: /[A-Z]/.test(formData.password),
+      lowercase: /[a-z]/.test(formData.password),
+      number: /\d/.test(formData.password),
+      specialChar: /[!@#$%^&*]/.test(formData.password),
+    })
+    setPasswordsMatch(formData.password === formData.confirmPassword && formData.password.length > 0)
+  }, [formData.password, formData.confirmPassword])
+
+  const validateName = (name) => {
+    if (name.length < 2) {
+      setNameValidation("Username must be greater than 2 characters.")
+    } else {
+      setNameValidation("")
+    }
+  }
+
+  const validateEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      setEmailValidation("Please enter a valid email address.")
+    } else {
+      setEmailValidation("")
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // Validate passwords match
-    if (formData.password !== formData.confirmPassword) {
+
+    if (!passwordsMatch) {
       toast({
         title: "Registration failed",
         description: "Passwords do not match",
@@ -36,9 +80,9 @@ export default function RegisterPage() {
       })
       return
     }
-    
+
     setIsLoading(true)
-    
+
     try {
       await register(formData.email, formData.password, formData.name || undefined)
       toast({
@@ -57,8 +101,23 @@ export default function RegisterPage() {
   }
 
   const handleInputChange = (field: string, value: string) => {
+    setIsTyping(true)
     setFormData((prev) => ({ ...prev, [field]: value }))
+    if (field === "name") {
+      validateName(value)
+    } else if (field === "email") {
+      validateEmail(value)
+    }
   }
+
+  const arePasswordRequirementsMet = Object.values(passwordRequirements).every(Boolean)
+  const isFormInvalid =
+    !formData.name ||
+    !formData.email ||
+    !arePasswordRequirementsMet ||
+    !passwordsMatch ||
+    nameValidation !== "" ||
+    emailValidation !== ""
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -95,6 +154,7 @@ export default function RegisterPage() {
                   required
                 />
               </div>
+              {isTyping && nameValidation && <p className="text-red-500 text-xs mt-1">{nameValidation}</p>}
             </div>
             <div className="space-y-2">
               <label htmlFor="email" className="text-sm font-medium text-emerald-400">
@@ -112,6 +172,7 @@ export default function RegisterPage() {
                   required
                 />
               </div>
+              {isTyping && emailValidation && <p className="text-red-500 text-xs mt-1">{emailValidation}</p>}
             </div>
             <div className="space-y-2">
               <label htmlFor="password" className="text-sm font-medium text-emerald-400">
@@ -136,6 +197,15 @@ export default function RegisterPage() {
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+              {isTyping && !arePasswordRequirementsMet && (
+                <div className="text-sm text-gray-400 mt-2 space-y-1">
+                  <Requirement label="At least 8 characters" met={passwordRequirements.minLength} />
+                  <Requirement label="An uppercase letter" met={passwordRequirements.uppercase} />
+                  <Requirement label="A lowercase letter" met={passwordRequirements.lowercase} />
+                  <Requirement label="A number" met={passwordRequirements.number} />
+                  <Requirement label="A special character (!@#$%^&*)" met={passwordRequirements.specialChar} />
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               <label htmlFor="confirmPassword" className="text-sm font-medium text-emerald-400">
@@ -160,10 +230,15 @@ export default function RegisterPage() {
                   {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+              {isTyping && formData.confirmPassword.length > 0 && (
+                <div className="text-sm text-gray-400 mt-2 space-y-1">
+                  <Requirement label="Passwords match" met={passwordsMatch} />
+                </div>
+              )}
             </div>
             <Button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || isFormInvalid}
               className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
             >
               {isLoading ? "Creating account..." : "Create Account"}
